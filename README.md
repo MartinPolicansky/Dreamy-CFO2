@@ -6,6 +6,7 @@
 - Záložky: **Měsíční data (Obrat & OPEX)**, **CAPEX**, **Cash-flow**, **KPI**
 - Grafy: Obrat vs. OPEX, EBITDA
 - API: /api/months, /api/capex, /api/cashflow, /api/kpi
+  
 
 ## Lokální spuštění
 1. `cp .env.example .env` a doplň `NEXTAUTH_SECRET`, `DATABASE_URL`
