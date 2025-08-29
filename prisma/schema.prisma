@@ -56,7 +56,7 @@ model MonthData {
   fulfillment    Int     @default(0)
   itAdmin        Int     @default(0)
   otherOpex      Int     @default(0)
-  @@unique([userId, month, branchId])
+  @@unique([userId, month])
 }
 
 model Capex {
