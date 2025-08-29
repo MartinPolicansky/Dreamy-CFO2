@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String?
+  email         String   @unique
+  passwordHash  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  months        MonthData[]
+  capex         Capex[]
+  cashflows     Cashflow[]
+  kpis          KPI[]
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  months    MonthData[]
+  cashflows Cashflow[]
+  kpis      KPI[]
+}
+
+model Benchmark {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pnoTarget          Float    @default(0)   // %
+  convRateTarget     Float    @default(0)   // %
+  aovTarget          Int      @default(0)   // CZK
+  returnRateMax      Float    @default(100) // %
+  createdAt          DateTime @default(now())
+}
+
+model MonthData {
+  id             String  @id @default(cuid())
+  userId         String
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month          String
+  revenuePlan    Int     @default(0)
+  revenueActual  Int     @default(0)
+  payroll        Int     @default(0)
+  rent           Int     @default(0)
+  marketing      Int     @default(0)
+  fulfillment    Int     @default(0)
+  itAdmin        Int     @default(0)
+  otherOpex      Int     @default(0)
+  @@unique([userId, month, branchId])
+}
+
+model Capex {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  category  String
+  amount    Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model Cashflow {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month          String
+  openingCash    Int      @default(0)
+  cashIn         Int      @default(0)
+  cashOut        Int      @default(0)
+  endingCash     Int      @default(0)
+  loansDrawn     Int      @default(0)
+  loanRepayments Int      @default(0)
+  @@unique([userId, month, branchId])
+}
+
+model KPI {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month               String
+  sessions            Int      @default(0)
+  orders              Int      @default(0)
+  conversionRate      Float    @default(0)
+  avgOrderValue       Int      @default(0)
+  avgItemsPerOrder    Float    @default(0)
+  returnRate          Float    @default(0)
+  discountRate        Float    @default(0)
+  newCustomerShare    Float    @default(0)
+  @@unique([userId, month, branchId])
+}
+
+// NextAuth models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?  @db.Text
+  session_state     String?
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
