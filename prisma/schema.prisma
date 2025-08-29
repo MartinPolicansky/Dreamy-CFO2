@@ -81,7 +81,7 @@ model Cashflow {
   endingCash     Int      @default(0)
   loansDrawn     Int      @default(0)
   loanRepayments Int      @default(0)
-  @@unique([userId, month, branchId])
+  @@unique([userId, month])
 }
 
 model KPI {
