@@ -1,46 +1,26 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String   @id @default(cuid())
-  name          String?
-  email         String   @unique
-  passwordHash  String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  months        MonthData[]
-  capex         Capex[]
-  cashflows     Cashflow[]
-  kpis          KPI[]
-}
+  id           String    @id @default(cuid())
+  name         String?
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-model Branch {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  createdAt DateTime @default(now())
+  sessions  Session[]
+  accounts  Account[]
   months    MonthData[]
+  capex     Capex[]
   cashflows Cashflow[]
   kpis      KPI[]
-}
-
-model Benchmark {
-  id                 String   @id @default(cuid())
-  userId             String
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pnoTarget          Float    @default(0)   // %
-  convRateTarget     Float    @default(0)   // %
-  aovTarget          Int      @default(0)   // CZK
-  returnRateMax      Float    @default(100) // %
-  createdAt          DateTime @default(now())
 }
 
 model MonthData {
@@ -84,6 +64,7 @@ model Cashflow {
   loanRepayments Int      @default(0)
 
   @@unique([userId, month])
+}
 
 model KPI {
   id               String   @id @default(cuid())
@@ -102,21 +83,22 @@ model KPI {
   @@unique([userId, month])
 }
 
-// NextAuth models
+/* NextAuth models */
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?  @db.Text
-  access_token      String?  @db.Text
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?  @db.Text
+  id_token          String? @db.Text
   session_state     String?
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -126,6 +108,7 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
+
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -135,5 +118,4 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
-  @@map("verification_tokens")
 }
