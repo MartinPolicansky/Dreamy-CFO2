@@ -14,6 +14,7 @@
 3. `npx prisma migrate deploy` (poprvé můžeš použít `npx prisma migrate dev --name init`)
 4. `npm run dev`
 5. Otevři `http://localhost:3000`
+   
 
 ## Nasazení (doporučeno: Vercel + Neon/Postgres)
 1. Vytvoř si bezplatný účet na **Neon.tech** (PostgreSQL) → vytvoř databázi → zkopíruj `DATABASE_URL`.
