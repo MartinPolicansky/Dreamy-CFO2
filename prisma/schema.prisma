@@ -44,18 +44,19 @@ model Benchmark {
 }
 
 model MonthData {
-  id             String  @id @default(cuid())
-  userId         String
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month          String
-  revenuePlan    Int     @default(0)
-  revenueActual  Int     @default(0)
-  payroll        Int     @default(0)
-  rent           Int     @default(0)
-  marketing      Int     @default(0)
-  fulfillment    Int     @default(0)
-  itAdmin        Int     @default(0)
-  otherOpex      Int     @default(0)
+  id            String  @id @default(cuid())
+  userId        String
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month         String
+  revenuePlan   Int     @default(0)
+  revenueActual Int     @default(0)
+  payroll       Int     @default(0)
+  rent          Int     @default(0)
+  marketing     Int     @default(0)
+  fulfillment   Int     @default(0)
+  itAdmin       Int     @default(0)
+  otherOpex     Int     @default(0)
+
   @@unique([userId, month])
 }
 
@@ -81,22 +82,23 @@ model Cashflow {
   endingCash     Int      @default(0)
   loansDrawn     Int      @default(0)
   loanRepayments Int      @default(0)
+
   @@unique([userId, month])
-}
 
 model KPI {
-  id                  String   @id @default(cuid())
-  userId              String
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  month               String
-  sessions            Int      @default(0)
-  orders              Int      @default(0)
-  conversionRate      Float    @default(0)
-  avgOrderValue       Int      @default(0)
-  avgItemsPerOrder    Float    @default(0)
-  returnRate          Float    @default(0)
-  discountRate        Float    @default(0)
-  newCustomerShare    Float    @default(0)
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month            String
+  sessions         Int      @default(0)
+  orders           Int      @default(0)
+  conversionRate   Float    @default(0)
+  avgOrderValue    Int      @default(0)
+  avgItemsPerOrder Float    @default(0)
+  returnRate       Float    @default(0)
+  discountRate     Float    @default(0)
+  newCustomerShare Float    @default(0)
+
   @@unique([userId, month])
 }
 
