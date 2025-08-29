@@ -97,7 +97,7 @@ model KPI {
   returnRate          Float    @default(0)
   discountRate        Float    @default(0)
   newCustomerShare    Float    @default(0)
-  @@unique([userId, month, branchId])
+  @@unique([userId, month])
 }
 
 // NextAuth models
