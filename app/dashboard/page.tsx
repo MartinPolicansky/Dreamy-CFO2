@@ -16,6 +16,8 @@ export default function Dashboard(){
   const { data: capex, mutate: refetchCapex } = useSWR('/api/capex', fetcher)
   const { data: cashflow, mutate: refetchCF } = useSWR('/api/cashflow', fetcher)
   const { data: kpi, mutate: refetchKPI } = useSWR('/api/kpi', fetcher)
+  const cashflowSafe = Array.isArray(cashflow) ? cashflow : [];
+  const capexSafe = Array.isArray(capex) ? capex : [];
 
   const [newMonth, setNewMonth] = useState({ month:'2025-01', revenuePlan:'', revenueActual:'', payroll:'', rent:'', marketing:'', fulfillment:'', itAdmin:'', otherOpex:'' })
   const [newCapex, setNewCapex] = useState({ date:'2025-01-01', category:'', amount:'', comment:'' })
