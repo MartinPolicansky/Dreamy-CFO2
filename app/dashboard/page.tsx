@@ -10,30 +10,16 @@ import {
 } from 'recharts'
 import * as XLSX from 'xlsx'
 
+// ------------------ pomocné funkce ------------------
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 const czk = (n: number) => (n || 0).toLocaleString('cs-CZ') + ' Kč'
 
-// ---------- Helpers pro robustní import ----------
-function num(x: any): number {
-  if (x == null || x === '') return 0
-  if (typeof x === 'number') return Number.isFinite(x) ? x : 0
-  let s = String(x)
-    // odstraní běžné mezery + pevné NBSP + úzké NBSP
-    .replace(/[\u00A0\u202F\s]/g, '')
-    // odstraní měny a vše kromě číslic, čárky, tečky a mínusu
-    .replace(/[^\d.,-]/g, '')
-    .trim()
-
-  // pokud je zároveň tečka i čárka → čárky ber jako oddělovač tisíců
-  if (s.includes('.') && s.includes(',')) {
-    s = s.replace(/,/g, '')
-  } else if ((s.match(/,/g) || []).length === 1 && !s.includes('.')) {
-    // jediná čárka, žádná tečka → čárka je desetinný oddělovač
-    s = s.replace(',', '.')
-  }
-
-  const n = Number(s)
-  return Number.isFinite(n) ? n : 0
+function findSheet(workbook: any, names: string[]) {
+  const by = new Set(names.map(n => n.trim().toLowerCase()))
+  const sheetName = (workbook.SheetNames || []).find(
+    (n: string) => by.has(n.trim().toLowerCase())
+  )
+  return sheetName ? workbook.Sheets[sheetName] : null
 }
 function excelSerialToDate(serial: number): Date {
   const utcDays = Math.floor(serial - 25569)
@@ -51,7 +37,8 @@ function ym(x: any): string {
   if (x == null) return ''
   if (x instanceof Date) return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`
   if (typeof x === 'number' && x > 20000 && x < 60000) {
-    const d = excelSerialToDate(x); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const d = excelSerialToDate(x)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }
   const s = String(x).trim()
   let m = s.match(/^(\d{4})[-/.](\d{1,2})/)
@@ -63,7 +50,9 @@ function ym(x: any): string {
 function ymd(x: any): string {
   if (x == null) return ''
   if (x instanceof Date) return x.toISOString().slice(0, 10)
-  if (typeof x === 'number' && x > 20000 && x < 60000) return excelSerialToDate(x).toISOString().slice(0, 10)
+  if (typeof x === 'number' && x > 20000 && x < 60000) {
+    return excelSerialToDate(x).toISOString().slice(0, 10)
+  }
   const s = String(x).trim()
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
   if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
@@ -71,15 +60,40 @@ function ymd(x: any): string {
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
   return s.slice(0, 10)
 }
+function num(x: any): number {
+  if (x == null || x === '') return 0
+  if (typeof x === 'number') return Number.isFinite(x) ? x : 0
+  let s = String(x)
+    .replace(/[\u00A0\u202F\s]/g, '')      // běžné + pevné + úzké mezery
+    .replace(/[^\d.,-]/g, '')              // pryč „Kč“ apod.
+    .trim()
+  if (s.includes('.') && s.includes(',')) {
+    s = s.replace(/,/g, '')                // čárky ber jako oddělovače tisíců
+  } else if ((s.match(/,/g) || []).length === 1 && !s.includes('.')) {
+    s = s.replace(',', '.')                // jediná čárka -> desetinná
+  }
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
+}
 
-// ---------- Šablona XLSX ----------
+// ------------------ XLSX šablona ------------------
 function DownloadTemplate() {
   const wb = XLSX.utils.book_new()
-  const obraty = XLSX.utils.json_to_sheet([{ 'Month (YYYY-MM)': '2025-01', 'Revenue Plan CZK': '', 'Revenue Reality CZK': '' }])
-  const opex = XLSX.utils.json_to_sheet([{ 'Month (YYYY-MM)': '2025-01', 'Payroll CZK': '', 'Rent CZK': '', 'Marketing CZK': '', 'Fulfillment CZK': '', 'IT/Admin CZK': '', 'Other OPEX CZK': '' }])
-  const capex = XLSX.utils.json_to_sheet([{ 'Date (YYYY-MM-DD)': '2025-01-15', 'Category': '', 'Amount CZK': '', 'Comment': '' }])
-  const cf = XLSX.utils.json_to_sheet([{ 'Month (YYYY-MM)': '2025-01', 'Opening Cash CZK': '', 'Cash In CZK': '', 'Cash Out CZK': '', 'Ending Cash CZK': '' }])
-  const kpi = XLSX.utils.json_to_sheet([{ 'Month (YYYY-MM)': '2025-01', 'Orders': '', 'Avg Order Value CZK': '', 'Conversion Rate %': '' }])
+  const obraty = XLSX.utils.json_to_sheet([
+    { 'Month (YYYY-MM)': '2025-01', 'Revenue Plan CZK': '', 'Revenue Reality CZK': '' }
+  ])
+  const opex = XLSX.utils.json_to_sheet([
+    { 'Month (YYYY-MM)': '2025-01', 'Payroll CZK': '', 'Rent CZK': '', 'Marketing CZK': '', 'Fulfillment CZK': '', 'IT/Admin CZK': '', 'Other OPEX CZK': '' }
+  ])
+  const capex = XLSX.utils.json_to_sheet([
+    { 'Date (YYYY-MM-DD)': '2025-01-15', 'Category': '', 'Amount CZK': '', 'Comment': '' }
+  ])
+  const cf = XLSX.utils.json_to_sheet([
+    { 'Month (YYYY-MM)': '2025-01', 'Opening Cash CZK': '', 'Cash In CZK': '', 'Cash Out CZK': '', 'Ending Cash CZK': '' }
+  ])
+  const kpi = XLSX.utils.json_to_sheet([
+    { 'Month (YYYY-MM)': '2025-01', 'Orders': '', 'Avg Order Value CZK': '', 'Conversion Rate %': '' }
+  ])
   const inv = XLSX.utils.json_to_sheet([{
     'Month (YYYY-MM)': '2025-01',
     'Purchases CZK': '',
@@ -87,19 +101,21 @@ function DownloadTemplate() {
     'Closing Stock CZK': '',
     'Adjustments CZK': ''
   }])
+
   XLSX.utils.book_append_sheet(wb, obraty, 'Obraty')
   XLSX.utils.book_append_sheet(wb, opex, 'OPEX (Provozní náklady)')
   XLSX.utils.book_append_sheet(wb, capex, 'CAPEX')
   XLSX.utils.book_append_sheet(wb, cf, 'Cash Flow')
   XLSX.utils.book_append_sheet(wb, kpi, 'KPIs')
   XLSX.utils.book_append_sheet(wb, inv, 'Inventory')
+
   XLSX.writeFile(wb, 'Dreamy_CFO_Template.xlsx')
 }
 
-// ---------- Import XLSX (robustní) ----------
+// ------------------ Import XLSX (robustní) ------------------
 async function importXLSX(file: File) {
   const data = await file.arrayBuffer()
-  const wb = XLSX.read(data)
+  const wb = XLSX.read(data, { cellDates: true })
 
   // 1) listy (tolerantní názvy)
   const sObraty = findSheet(wb, ['Obraty'])
@@ -116,7 +132,15 @@ async function importXLSX(file: File) {
   const k = sKPI ? (XLSX.utils.sheet_to_json(sKPI) as any[]) : []
   const inv = sInv ? (XLSX.utils.sheet_to_json(sInv) as any[]) : []
 
-  // 2) POSTy (sčítáme obraty+opex na měsíc)
+  // Debug hlaviček (uvidíš v DevTools → Console)
+  console.log('[IMPORT DEBUG] Obraty headers:', Object.keys((obraty[0]||{})))
+  console.log('[IMPORT DEBUG] OPEX headers:', Object.keys((opex[0]||{})))
+  console.log('[IMPORT DEBUG] CashFlow headers:', Object.keys((cf[0]||{})))
+  console.log('[IMPORT DEBUG] CAPEX headers:', Object.keys((cap[0]||{})))
+  console.log('[IMPORT DEBUG] KPIs headers:', Object.keys((k[0]||{})))
+  console.log('[IMPORT DEBUG] Inventory headers:', Object.keys((inv[0]||{})))
+
+  // 2) POSTy (sloučíme obraty+opex do jednoho /api/months)
   let cntMonths = 0, cntCapex = 0, cntCF = 0, cntKPI = 0, cntInv = 0
 
   const bucket: Record<string, any> = {}
@@ -132,6 +156,10 @@ async function importXLSX(file: File) {
       fulfillment: num(r['Fulfillment CZK']), itAdmin: num(r['IT/Admin CZK']), otherOpex: num(r['Other OPEX CZK'])
     }
   }
+
+  ;(window as any).lastBucket = bucket
+  console.table(Object.values(bucket).slice(0, 5))
+
   for (const m of Object.keys(bucket)) {
     const res = await fetch('/api/months', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bucket[m]) })
     if (res.ok) cntMonths++
@@ -187,7 +215,7 @@ async function importXLSX(file: File) {
   location.reload()
 }
 
-// ---------- Hlavní komponenta ----------
+// ------------------ komponenta ------------------
 export default function Dashboard() {
   const { data: months } = useSWR('/api/months', fetcher)
   const { data: capex } = useSWR('/api/capex', fetcher)
@@ -200,12 +228,14 @@ export default function Dashboard() {
   const capexSafe: any[] = Array.isArray(capex) ? capex : []
   const inventorySafe: any[] = Array.isArray(inventory) ? inventory : []
 
+  // stavy formulářů
   const [newMonth, setNewMonth] = useState<any>({ month: '2025-01', revenuePlan: '', revenueActual: '', payroll: '', rent: '', marketing: '', fulfillment: '', itAdmin: '', otherOpex: '' })
   const [newCapex, setNewCapex] = useState<any>({ date: '2025-01-01', category: '', amount: '', comment: '' })
   const [newCF, setNewCF] = useState<any>({ month: '2025-01', openingCash: '', cashIn: '', cashOut: '', endingCash: '' })
   const [newKPI, setNewKPI] = useState<any>({ month: '2025-01', sessions: '', orders: '', conversionRate: '', avgOrderValue: '' })
   const [newInv, setNewInv] = useState<any>({ month: '2025-01', purchases: '', openingStock: '', closingStock: '', adjustments: '' })
 
+  // AI memo
   const [advisor, setAdvisor] = useState<any>(null)
   const [advisorLoading, setAdvisorLoading] = useState(false)
   async function generateMemo() {
@@ -219,6 +249,7 @@ export default function Dashboard() {
     }
   }
 
+  // computed řady
   const computed = useMemo(() => {
     return monthsSafe.map((r: any) => {
       const opex = (r.payroll || 0) + (r.rent || 0) + (r.marketing || 0) + (r.fulfillment || 0) + (r.itAdmin || 0) + (r.otherOpex || 0)
@@ -455,13 +486,12 @@ export default function Dashboard() {
           <div className="font-medium mb-2">KPI</div>
           <div className="grid grid-cols-2 gap-2">
             <input className="border p-2 rounded" placeholder="YYYY-MM" value={newKPI.month} onChange={e => setNewKPI({ ...newKPI, month: e.target.value })} />
-            <input className="border p-2 rounded" placeholder="Sessions" value={newKPI.sessions} onChange={e => setNewKPI({ ...newKPI, sessions: e.target.value })} />
             <input className="border p-2 rounded" placeholder="Orders" value={newKPI.orders} onChange={e => setNewKPI({ ...newKPI, orders: e.target.value })} />
             <input className="border p-2 rounded" placeholder="CR (%)" value={newKPI.conversionRate} onChange={e => setNewKPI({ ...newKPI, conversionRate: e.target.value })} />
             <input className="border p-2 rounded" placeholder="AOV (CZK)" value={newKPI.avgOrderValue} onChange={e => setNewKPI({ ...newKPI, avgOrderValue: e.target.value })} />
           </div>
           <button className="px-3 py-2 rounded bg-black text-white" onClick={() => save('/api/kpi', {
-            month: newKPI.month, sessions: +newKPI.sessions || 0, orders: +newKPI.orders || 0,
+            month: newKPI.month, orders: +newKPI.orders || 0,
             conversionRate: +newKPI.conversionRate || 0, avgOrderValue: +newKPI.avgOrderValue || 0
           })}>Uložit KPI</button>
         </div>
