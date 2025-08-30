@@ -90,7 +90,31 @@ export default function Dashboard(){
           </ResponsiveContainer>
         </div>
       </div>
-
+{/* Cash-flow & CAPEX charts */}
+<div className="grid lg:grid-cols-2 gap-6">
+  <div className="bg-white p-4 rounded shadow h-80">
+    <div className="font-medium mb-2">Cash-flow (In/Out/Ending)</div>
+    <ResponsiveContainer>
+      <LineChart data={cashflowSafe.map((r:any)=>({ name:r.month, in:r.cashIn, out:r.cashOut, end:r.endingCash }))}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="name" /><YAxis /><Tooltip /><Legend />
+        <Line type="monotone" dataKey="in" name="Cash In" />
+        <Line type="monotone" dataKey="out" name="Cash Out" />
+        <Line type="monotone" dataKey="end" name="Ending Cash" />
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+  <div className="bg-white p-4 rounded shadow h-80">
+    <div className="font-medium mb-2">CAPEX Timeline</div>
+    <ResponsiveContainer>
+      <BarChart data={capexSafe.map((r:any)=>({ name: (r.date||'').slice(0,10), amount:r.amount, category:r.category }))}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="name" /><YAxis /><Tooltip /><Legend />
+        <Bar dataKey="amount" name="Investice (CZK)" />
+      </BarChart>
+    </ResponsiveContainer>
+  </div>
+</div>
       {/* DATA sections */}
       <section className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded shadow">
