@@ -105,41 +105,272 @@ async function importXLSX(file: File) {
   const data = await file.arrayBuffer()
   const wb = XLSX.read(data)
 
-  // Obraty + OPEX -> /api/months
-  const obraty = wb.Sheets['Obraty'] ? XLSX.utils.sheet_to_json(wb.Sheets['Obraty']) as any[] : []
-  const opex = wb.Sheets['OPEX (Provozní náklady)'] ? XLSX.utils.sheet_to_json(wb.Sheets['OPEX (Provozní náklady)']) as any[] : []
-  const map: any = {}
+  // --- 1) Načti listy (tolerantně k názvům) ---
+  const sObraty = findSheet(wb, ['Obraty'])
+  const sOpex = findSheet(wb, ['OPEX (Provozní náklady)', 'OPEX', 'OPEX - Provozní náklady'])
+  const sCapex = findSheet(wb, ['CAPEX'])
+  const sCF = findSheet(wb, ['Cash Flow', 'Cashflow'])
+  const sKPI = findSheet(wb, ['KPIs', 'KPI'])
+  const sInv = findSheet(wb, ['Inventory', 'Zásoby'])
+
+  const obraty = sObraty ? (XLSX.utils.sheet_to_json(sObraty) as any[]) : []
+  const opex = sOpex ? (XLSX.utils.sheet_to_json(sOpex) as any[]) : []
+  const cap = sCapex ? (XLSX.utils.sheet_to_json(sCapex) as any[]) : []
+  const cf = sCF ? (XLSX.utils.sheet_to_json(sCF) as any[]) : []
+  const k = sKPI ? (XLSX.utils.sheet_to_json(sKPI) as any[]) : []
+  const inv = sInv ? (XLSX.utils.sheet_to_json(sInv) as any[]) : []
+
+  // --- 2) POSTy s robustním parsováním ---
+  let cntMonths = 0, cntCapex = 0, cntCF = 0, cntKPI = 0, cntInv = 0
+
+  // Obraty+OPEX → /api/months (sloučíme podle měsíce)
+  const bucket: Record<string, any> = {}
   for (const r of obraty) {
-    const m = (r['Month (YYYY-MM)'] || '').toString().slice(0, 7)
+    const m = ym(r['Month (YYYY-MM)'])
     if (!m) continue
-    map[m] = { ...(map[m] || {}), month: m, revenuePlan: +r['Revenue Plan CZK'] || 0, revenueActual: +r['Revenue Reality CZK'] || 0 }
-  }
-  for (const r of opex) {
-    const m = (r['Month (YYYY-MM)'] || '').toString().slice(0, 7)
-    if (!m) continue
-    map[m] = {
-      ...(map[m] || {}), month: m,
-      payroll: +r['Payroll CZK'] || 0, rent: +r['Rent CZK'] || 0, marketing: +r['Marketing CZK'] || 0,
-      fulfillment: +r['Fulfillment CZK'] || 0, itAdmin: +r['IT/Admin CZK'] || 0, otherOpex: +r['Other OPEX CZK'] || 0
+    bucket[m] = {
+      ...(bucket[m] || {}),
+      month: m,
+      revenuePlan: num(r['Revenue Plan CZK']),
+      revenueActual: num(r['Revenue Reality CZK'])
     }
   }
-  for (const key of Object.keys(map)) {
-    await fetch('/api/months', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(map[key]) })
+  for (const r of opex) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    bucket[m] = {
+      ...(bucket[m] || {}),
+      month: m,
+      payroll: num(r['Payroll CZK']),
+      rent: num(r['Rent CZK']),
+      marketing: num(r['Marketing CZK']),
+      fulfillment: num(r['Fulfillment CZK']),
+      itAdmin: num(r['IT/Admin CZK']),
+      otherOpex: num(r['Other OPEX CZK'])
+    }
+  }
+  for (const m of Object.keys(bucket)) {
+    const res = await fetch('/api/months', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bucket[m])
+    })
+    if (res.ok) cntMonths++
   }
 
-  // CAPEX -> /api/capex
-  const cap = wb.Sheets['CAPEX'] ? XLSX.utils.sheet_to_json(wb.Sheets['CAPEX']) as any[] : []
+  // CAPEX
   for (const r of cap) {
-    await fetch('/api/capex', {
+    const res = await fetch('/api/capex', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        date: new Date(r['Date (YYYY-MM-DD)'] || `${(r['Date'] || '2025-01-01')}`),
-        category: r['Category'] || '', amount: +r['Amount CZK'] || 0, comment: r['Comment'] || ''
+        date: new Date(ymd(r['Date (YYYY-MM-DD)'] || r['Date'] || '')),
+        category: String(r['Category'] || ''),
+        amount: num(r['Amount CZK']),
+        comment: r['Comment'] || ''
       })
     })
+    if (res.ok) cntCapex++
   }
 
+  // Cash Flow
+  for (const r of cf) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    const res = await fetch('/api/cashflow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        month: m,
+        openingCash: num(r['Opening Cash CZK']),
+        cashIn: num(r['Cash In CZK']),
+        cashOut: num(r['Cash Out CZK']),
+        endingCash: num(r['Ending Cash CZK'])
+      })
+    })
+    if (res.ok) cntCF++
+  }
+
+  // KPI
+  for (const r of k) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    const res = await fetch('/api/kpi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        month: m,
+        orders: num(r['Orders']),
+        avgOrderValue: num(r['Avg Order Value CZK']),
+        conversionRate: Number(String(r['Conversion Rate %']).replace(',', '.')) || 0
+      })
+    })
+    if (res.ok) cntKPI++
+  }
+
+  // Inventory
+  for (const r of inv) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    const res = await fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        month: m,
+        purchases: num(r['Purchases CZK']),
+        openingStock: num(r['Opening Stock CZK']),
+        closingStock: num(r['Closing Stock CZK']),
+        adjustments: num(r['Adjustments CZK'])
+      })
+    })
+    if (res.ok) cntInv++
+  }
+
+  // Report pro uživatele + refresh
+  alert(`Import hotov:
+- Měsíce (obrat/OPEX): ${cntMonths}
+- Cash Flow: ${cntCF}
+- CAPEX: ${cntCapex}
+- KPI: ${cntKPI}
+- Inventory: ${cntInv}`)
+
+  location.reload()
+}
+async function importXLSX(file: File) {
+  const data = await file.arrayBuffer()
+  const wb = XLSX.read(data)
+
+  // --- 1) Načti listy (tolerantně k názvům) ---
+  const sObraty = findSheet(wb, ['Obraty'])
+  const sOpex = findSheet(wb, ['OPEX (Provozní náklady)', 'OPEX', 'OPEX - Provozní náklady'])
+  const sCapex = findSheet(wb, ['CAPEX'])
+  const sCF = findSheet(wb, ['Cash Flow', 'Cashflow'])
+  const sKPI = findSheet(wb, ['KPIs', 'KPI'])
+  const sInv = findSheet(wb, ['Inventory', 'Zásoby'])
+
+  const obraty = sObraty ? (XLSX.utils.sheet_to_json(sObraty) as any[]) : []
+  const opex = sOpex ? (XLSX.utils.sheet_to_json(sOpex) as any[]) : []
+  const cap = sCapex ? (XLSX.utils.sheet_to_json(sCapex) as any[]) : []
+  const cf = sCF ? (XLSX.utils.sheet_to_json(sCF) as any[]) : []
+  const k = sKPI ? (XLSX.utils.sheet_to_json(sKPI) as any[]) : []
+  const inv = sInv ? (XLSX.utils.sheet_to_json(sInv) as any[]) : []
+
+  // --- 2) POSTy s robustním parsováním ---
+  let cntMonths = 0, cntCapex = 0, cntCF = 0, cntKPI = 0, cntInv = 0
+
+  // Obraty+OPEX → /api/months (sloučíme podle měsíce)
+  const bucket: Record<string, any> = {}
+  for (const r of obraty) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    bucket[m] = {
+      ...(bucket[m] || {}),
+      month: m,
+      revenuePlan: num(r['Revenue Plan CZK']),
+      revenueActual: num(r['Revenue Reality CZK'])
+    }
+  }
+  for (const r of opex) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    bucket[m] = {
+      ...(bucket[m] || {}),
+      month: m,
+      payroll: num(r['Payroll CZK']),
+      rent: num(r['Rent CZK']),
+      marketing: num(r['Marketing CZK']),
+      fulfillment: num(r['Fulfillment CZK']),
+      itAdmin: num(r['IT/Admin CZK']),
+      otherOpex: num(r['Other OPEX CZK'])
+    }
+  }
+  for (const m of Object.keys(bucket)) {
+    const res = await fetch('/api/months', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bucket[m])
+    })
+    if (res.ok) cntMonths++
+  }
+
+  // CAPEX
+  for (const r of cap) {
+    const res = await fetch('/api/capex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: new Date(ymd(r['Date (YYYY-MM-DD)'] || r['Date'] || '')),
+        category: String(r['Category'] || ''),
+        amount: num(r['Amount CZK']),
+        comment: r['Comment'] || ''
+      })
+    })
+    if (res.ok) cntCapex++
+  }
+
+  // Cash Flow
+  for (const r of cf) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    const res = await fetch('/api/cashflow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        month: m,
+        openingCash: num(r['Opening Cash CZK']),
+        cashIn: num(r['Cash In CZK']),
+        cashOut: num(r['Cash Out CZK']),
+        endingCash: num(r['Ending Cash CZK'])
+      })
+    })
+    if (res.ok) cntCF++
+  }
+
+  // KPI
+  for (const r of k) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    const res = await fetch('/api/kpi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        month: m,
+        orders: num(r['Orders']),
+        avgOrderValue: num(r['Avg Order Value CZK']),
+        conversionRate: Number(String(r['Conversion Rate %']).replace(',', '.')) || 0
+      })
+    })
+    if (res.ok) cntKPI++
+  }
+
+  // Inventory
+  for (const r of inv) {
+    const m = ym(r['Month (YYYY-MM)'])
+    if (!m) continue
+    const res = await fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        month: m,
+        purchases: num(r['Purchases CZK']),
+        openingStock: num(r['Opening Stock CZK']),
+        closingStock: num(r['Closing Stock CZK']),
+        adjustments: num(r['Adjustments CZK'])
+      })
+    })
+    if (res.ok) cntInv++
+  }
+
+  // Report pro uživatele + refresh
+  alert(`Import hotov:
+- Měsíce (obrat/OPEX): ${cntMonths}
+- Cash Flow: ${cntCF}
+- CAPEX: ${cntCapex}
+- KPI: ${cntKPI}
+- Inventory: ${cntInv}`)
+
+  location.reload()
+}
   // Cash Flow -> /api/cashflow
   const cf = wb.Sheets['Cash Flow'] ? XLSX.utils.sheet_to_json(wb.Sheets['Cash Flow']) as any[] : []
   for (const r of cf) {
