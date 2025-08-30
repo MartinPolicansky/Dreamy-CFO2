@@ -9,6 +9,75 @@ import {
   ReferenceLine, ResponsiveContainer
 } from 'recharts'
 import * as XLSX from 'xlsx'
+// --- Helpers pro robustní import ---
+function findSheet(workbook: any, names: string[]) {
+  const by = new Set(names.map(n => n.trim().toLowerCase()))
+  const sheetName = (workbook.SheetNames || []).find(
+    (n: string) => by.has(n.trim().toLowerCase())
+  )
+  return sheetName ? workbook.Sheets[sheetName] : null
+}
+
+function num(x: any): number {
+  if (x == null) return 0
+  if (typeof x === 'number') return Number.isFinite(x) ? x : 0
+  let s = String(x).trim()
+  // Zahoď měny, text, mezery
+  s = s.replace(/\s/g, '').replace(/[^\d.,-]/g, '')
+  // Pokud je jedna čárka a žádná tečka → čárka jako desetinná
+  if ((s.match(/,/g) || []).length === 1 && (s.match(/\./g) || []).length === 0) {
+    s = s.replace(',', '.')
+  }
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
+}
+
+function excelSerialToDate(serial: number): Date {
+  // Excel (1900-based) → JS Date (UTC)
+  const utcDays = Math.floor(serial - 25569)
+  const utcValue = utcDays * 86400
+  const dateInfo = new Date(utcValue * 1000)
+  const fractional = serial - Math.floor(serial)
+  const totalSeconds = Math.floor(86400 * fractional)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor(totalSeconds / 60) % 60
+  const seconds = totalSeconds % 60
+  dateInfo.setHours(hours, minutes, seconds, 0)
+  return dateInfo
+}
+
+function ym(x: any): string {
+  if (x == null) return ''
+  if (x instanceof Date) {
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`
+  }
+  if (typeof x === 'number' && x > 20000 && x < 60000) {
+    const d = excelSerialToDate(x)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }
+  const s = String(x).trim()
+  // 2025-01 nebo 2025/1
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})/)
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}`
+  // 1/2025 nebo 1.2025
+  m = s.match(/^(\d{1,2})[-/.](\d{4})$/)
+  if (m) return `${m[2]}-${String(m[1]).padStart(2, '0')}`
+  return s.slice(0, 7)
+}
+
+function ymd(x: any): string {
+  if (x == null) return ''
+  if (x instanceof Date) return x.toISOString().slice(0, 10)
+  if (typeof x === 'number' && x > 20000 && x < 60000) {
+    return excelSerialToDate(x).toISOString().slice(0, 10)
+  }
+  const s = String(x).trim()
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  return s.slice(0, 10)
+}
 
 const fetcher = (url: string) => fetch(url).then(r => r.json())
 
