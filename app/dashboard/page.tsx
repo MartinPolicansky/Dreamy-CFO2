@@ -14,17 +14,24 @@ const fetcher = (url: string) => fetch(url).then(r => r.json())
 const czk = (n: number) => (n || 0).toLocaleString('cs-CZ') + ' Kč'
 
 // ---------- Helpers pro robustní import ----------
-function findSheet(workbook: any, names: string[]) {
-  const by = new Set(names.map(n => n.trim().toLowerCase()))
-  const sheetName = (workbook.SheetNames || []).find((n: string) => by.has(n.trim().toLowerCase()))
-  return sheetName ? workbook.Sheets[sheetName] : null
-}
 function num(x: any): number {
-  if (x == null) return 0
+  if (x == null || x === '') return 0
   if (typeof x === 'number') return Number.isFinite(x) ? x : 0
-  let s = String(x).trim()
-  s = s.replace(/\s/g, '').replace(/[^\d.,-]/g, '')
-  if ((s.match(/,/g) || []).length === 1 && (s.match(/\./g) || []).length === 0) s = s.replace(',', '.')
+  let s = String(x)
+    // odstraní běžné mezery + pevné NBSP + úzké NBSP
+    .replace(/[\u00A0\u202F\s]/g, '')
+    // odstraní měny a vše kromě číslic, čárky, tečky a mínusu
+    .replace(/[^\d.,-]/g, '')
+    .trim()
+
+  // pokud je zároveň tečka i čárka → čárky ber jako oddělovač tisíců
+  if (s.includes('.') && s.includes(',')) {
+    s = s.replace(/,/g, '')
+  } else if ((s.match(/,/g) || []).length === 1 && !s.includes('.')) {
+    // jediná čárka, žádná tečka → čárka je desetinný oddělovač
+    s = s.replace(',', '.')
+  }
+
   const n = Number(s)
   return Number.isFinite(n) ? n : 0
 }
